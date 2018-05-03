@@ -1,6 +1,4 @@
 import codecs
-import re
-import string
 
 from first_task.helper import transform_without_punctuation, count_words
 

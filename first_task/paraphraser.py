@@ -1,8 +1,6 @@
 import codecs
 
-import untangle
-from lxml import objectify, etree
-import xml.etree.ElementTree as ET
+from lxml import objectify
 
 from first_task.helper import transform_without_punctuation, count_words
 
