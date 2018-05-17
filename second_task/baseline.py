@@ -109,17 +109,17 @@ def main(parser):
         with open(args.output, 'a+') as out:
             out.write(str(np.mean(predicted == y_test)) + "\n")
             out.write(classification_report(y_test, predicted))
-        print(predicted.tolist())
-        print(y_test.tolist())
+            out.write("\n")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--src-train-texts', action="store", dest="src_train_texts", default='../paraphraser/paraphrases.xml')
     parser.add_argument('--text-encoding', action="store", dest="encoding", default="utf_8")
-    parser.add_argument('--word-type', choices=['surface_all', 'surface_no_pm', 'stem'], default="stem", action="store", dest="word_type")
+    parser.add_argument('--word-type', choices=['surface_all', 'surface_no_pm', 'stem'], default="surface_no_pm", action="store", dest="word_type")
     parser.add_argument('-n', type=int, action="store", dest="n", default=2)
     parser.add_argument('--features', choices=['true', 'false'], action="store", default='true')
     parser.add_argument('--laplace', action="store_true")
     parser.add_argument('--unknown-word-freq', type=int, action="store", default=0, dest="word_freq")
     parser.add_argument('-o', action="store", dest="output", default='../second_task/output.txt')
+
     main(parser)
