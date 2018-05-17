@@ -108,15 +108,17 @@ def main(parser):
         feat_union = FeatureUnion(transformer_list=[('tfidf', TfidfVectorizer(analyzer='word',
                                                                               min_df=3,
                                                                               ngram_range=(1, args.n),
-                                                                              stop_words=sw)),
+                                                                              stop_words=sw,
+                                                                              smooth_idf=args.laplace)),
                                                     ('cv', CountVectorizer(analyzer='word',
                                                                            ngram_range=(1, args.n))),
                                                     ('pos', PosStats())])
     else:
         feat_union = TfidfVectorizer(analyzer='word',
-                                    min_df=3,
-                                    ngram_range=(1, args.n),
-                                    stop_words=sw)
+                                     min_df=3,
+                                     ngram_range=(1, args.n),
+                                     stop_words=sw,
+                                     smooth_idf=args.laplace)
 
     BagOfWords = pd.concat([class_data.first_sentence, class_data.second_sentence], axis=0)
     feat_union.fit(BagOfWords)
@@ -142,11 +144,7 @@ def main(parser):
         out.write(str(np.mean(predicted == y_test)) + "\n")
         out.write(classification_report(y_test, predicted))
         out.write("\n")
-    print(np.mean(predicted == y_test))
-
-    print(classification_report(y_test, predicted))
-    print(predicted.tolist())
-    print(y_test.tolist())
+    print("~~~~~Task completed~~~~~")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -155,8 +153,7 @@ if __name__ == '__main__':
     parser.add_argument('--word-type', choices=['surface_all', 'surface_no_pm', 'stem'], default="surface_no_pm", action="store", dest="word_type")
     parser.add_argument('-n', type=int, action="store", dest="n", default=2)
     parser.add_argument('--features', choices=['true', 'false'], action="store", default='true')
-    parser.add_argument('--laplace', action="store_true")
-    parser.add_argument('--unknown-word-freq', type=int, action="store", default=0, dest="word_freq")
+    parser.add_argument('--laplace', action="store_true", dest="laplace")
     parser.add_argument('-o', action="store", dest="output", default='../second_task/output.txt')
 
     main(parser)
