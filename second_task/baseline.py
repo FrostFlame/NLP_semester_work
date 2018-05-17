@@ -55,51 +55,82 @@ def tokenize(list_of_sentences):
         new_text.append(new_sentence)
     return new_text
 
-def main():
-    with codecs.open('../paraphraser/paraphrases.xml', 'r', "utf_8") as file:
-        data = objectify.fromstring(file.read())
-        first_sentence = []
-        second_sentence = []
-        similarity = []
-
+def get_data(data, corp):
+    first_sentence = []
+    second_sentence = []
+    similarity = []
+    if corp == 'paraphrases':
         for doc in data.corpus.paraphrase:
             first_sentence.append(doc.value[3].text)
             second_sentence.append(doc.value[4].text)
             similarity.append(doc.value[6].text)
+    return first_sentence, second_sentence, similarity
 
-        first_sentence = tokenize(first_sentence)
-        second_sentence = tokenize(second_sentence)
+def main():
+    corp = 'paraphrases'
+    if corp == 'paraphrases':
+        with codecs.open('../paraphraser/paraphrases.xml', 'r', "utf_8") as file:
+            data = objectify.fromstring(file.read())
 
-        class_data = pd.DataFrame({'first_sentence': first_sentence,
-                                   'second_sentence': second_sentence,
-                                   'similarity': similarity})
+            first_sentence, second_sentence, similarity = get_data(data, corp)
+    else:
+        with codecs.open('../msrpc/msr_paraphrase_train.txt', 'r', "utf_8_sig")as file:
+            file.readline()
+            first_sentence = []
+            second_sentence = []
+            similarity = list()
+            for line in file:
+                first_sentence.append(line.split('\t')[3])
+                second_sentence.append(line.split('\t')[4].strip())
+                similarity.append(int(line.split('\t')[0]))
 
-        feat_union = FeatureUnion( transformer_list=[('tfidf', TfidfVectorizer(analyzer='word',
-                                                                               min_df=3,
-                                                                               ngram_range=(1, 2),
-                                                                               stop_words=sw)),
-                                                     ('cv', CountVectorizer(analyzer='word',
-                                                                            ngram_range=(1, 2))),
-                                                     ('pos', PosStats())])
+        with codecs.open('../msrpc/msr_paraphrase_test.txt', 'r', "utf_8_sig")as file:
+            file.readline()
+            for line in file:
+                first_sentence.append(line.split('\t')[3])
+                second_sentence.append(line.split('\t')[4].strip())
+                similarity.append(int(line.split('\t')[0]))
 
-        BagOfWords = pd.concat([class_data.first_sentence, class_data.second_sentence], axis=0)
-        feat_union.fit(BagOfWords)
+    first_sentence = tokenize(first_sentence)
+    second_sentence = tokenize(second_sentence)
 
-        train_s1_matrix = feat_union.transform(class_data.first_sentence)
-        train_s2_matrix = feat_union.transform(class_data.second_sentence)
+    class_data = pd.DataFrame({'first_sentence': first_sentence,
+                               'second_sentence': second_sentence,
+                               'similarity': similarity})
 
-        X = abs(train_s1_matrix - train_s2_matrix)
-        y = class_data.similarity
+    feat_union = FeatureUnion( transformer_list=[('tfidf', TfidfVectorizer(analyzer='word',
+                                                                           min_df=3,
+                                                                           ngram_range=(1, 2),
+                                                                           stop_words=sw)),
+                                                 ('cv', CountVectorizer(analyzer='word',
+                                                                        ngram_range=(1, 2))),
+                                                 ('pos', PosStats())])
 
+    BagOfWords = pd.concat([class_data.first_sentence, class_data.second_sentence], axis=0)
+    feat_union.fit(BagOfWords)
+
+    train_s1_matrix = feat_union.transform(class_data.first_sentence)
+    train_s2_matrix = feat_union.transform(class_data.second_sentence)
+
+    X = abs(train_s1_matrix - train_s2_matrix)
+    y = class_data.similarity
+
+    if corp == 'paraphrase':
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=57)
-        lr = LogisticRegression()
-        lr.fit(X_train, y_train)
-        predicted = lr.predict(X_test)
-        print(np.mean(predicted == y_test))
+    else:
+        X_train = X[:4076]
+        X_test = X[4076:]
+        y_train = y[:4076]
+        y_test = y[4076:]
 
-        print(classification_report(y_test, predicted))
-        print(predicted.tolist())
-        print(y_test.tolist())
+    lr = LogisticRegression()
+    lr.fit(X_train, y_train)
+    predicted = lr.predict(X_test)
+    print(np.mean(predicted == y_test))
+
+    print(classification_report(y_test, predicted))
+    print(predicted.tolist())
+    print(y_test.tolist())
 
 if __name__ == '__main__':
     main()
