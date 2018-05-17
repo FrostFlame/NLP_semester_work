@@ -11,6 +11,7 @@ from nltk.corpus import stopwords
 from nltk.stem.snowball import SnowballStemmer
 from sklearn.pipeline import Pipeline
 from sklearn.pipeline import FeatureUnion
+import pickle
 
 from nltk import word_tokenize
 
@@ -139,8 +140,11 @@ def main(parser):
 
     lr = LogisticRegression()
     lr.fit(X_train, y_train)
+    f = open(args.output, 'wb')
+    pickle.dump(lr, f)
+    f.close()
     predicted = lr.predict(X_test)
-    with open(args.output, 'a+') as out:
+    with open('../second_task/output.txt', 'a+') as out:
         out.write(str(np.mean(predicted == y_test)) + "\n")
         out.write(classification_report(y_test, predicted))
         out.write("\n")
@@ -152,8 +156,8 @@ if __name__ == '__main__':
     parser.add_argument('--text-encoding', action="store", dest="encoding", default="utf_8")
     parser.add_argument('--word-type', choices=['surface_all', 'surface_no_pm', 'stem'], default="surface_no_pm", action="store", dest="word_type")
     parser.add_argument('-n', type=int, action="store", dest="n", default=2)
-    parser.add_argument('--features', choices=['true', 'false'], action="store", default='true')
+    parser.add_argument('--features', choices=['true', 'false'], action="store", default='false')
     parser.add_argument('--laplace', action="store_true", dest="laplace")
-    parser.add_argument('-o', action="store", dest="output", default='../second_task/output.txt')
+    parser.add_argument('-o', action="store", dest="output", default='../second_task/model.pickle')
 
     main(parser)
