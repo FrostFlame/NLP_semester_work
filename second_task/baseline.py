@@ -6,7 +6,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.model_selection import train_test_split, cross_validate, cross_val_predict
-from sklearn.metrics import classification_report, make_scorer, accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.linear_model import LogisticRegression
 from nltk.corpus import stopwords
 from nltk.stem.snowball import SnowballStemmer
@@ -72,6 +72,17 @@ def get_data(data, corp):
             second_sentence.append(doc.value[4].text)
             similarity.append(doc.value[6].text)
     return first_sentence, second_sentence, similarity
+
+def most_informative_feature_for_class(feat_union, classifier):
+    n = 10
+    features_for_all_classes = []
+    classes = classifier.classes_
+    for class_label in classes:
+        labelid = list(classes).index(class_label)
+        feature_names = feat_union.get_feature_names()
+        topn = sorted(zip(classifier.coef_[labelid], feature_names))[-n:]
+        features_for_all_classes.append(topn)
+    return features_for_all_classes
 
 def main(parser):
     args = parser.parse_args()
@@ -143,14 +154,17 @@ def main(parser):
     #results = cross_validate(lr, X, y, scoring=scoring, cv=kfold, return_train_score=False)
     predicted_cross_val = cross_val_predict(estimator=lr, X=X, y=y, cv=kfold)
     lr.fit(X_train, y_train)
+    most_informative_features = most_informative_feature_for_class(feat_union, lr)
     predicted = lr.predict(X_test)
-    with open(args.output, 'a+') as out:
+    with open(args.output, 'a+', encoding='utf-8') as out:
         out.write(str(np.mean(predicted == y_test)) + "\n")
         out.write(classification_report(y_test, predicted))
         out.write("\n")
         out.write("--- Cross-validation on " + str(num_folds) + " folds without additional features ---\n")
         out.write(classification_report(y, predicted_cross_val))
         out.write("\n")
+        for features_for_class in most_informative_features:
+            out.write(np.unicode(str(features_for_class)) + "\n")
         #out.write(str(results))
     print("~~~~~Task completed~~~~~")
 
