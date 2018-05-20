@@ -1,11 +1,12 @@
 import codecs, string, nltk, argparse
 import pandas as pd
 from lxml import objectify
+from sklearn import model_selection
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
+from sklearn.model_selection import train_test_split, cross_validate, cross_val_predict
+from sklearn.metrics import classification_report, make_scorer, accuracy_score, precision_score, recall_score, f1_score
 from sklearn.linear_model import LogisticRegression
 from nltk.corpus import stopwords
 from nltk.stem.snowball import SnowballStemmer
@@ -25,7 +26,7 @@ class PosStats(BaseEstimator, TransformerMixin):
     def transform(self, posts):
         features = []
         for sentence in posts:
-            tokenized = nltk.tokenize.word_tokenize(sentence[0])
+            tokenized = nltk.tokenize.word_tokenize(sentence)
             tokenized = nltk.pos_tag(tokenized)
             nn, rb, vb, jj = 0, 0, 0, 0
             for word in tokenized:
@@ -74,6 +75,7 @@ def get_data(data, corp):
 
 def main(parser):
     args = parser.parse_args()
+    num_folds = 5
     if args.src_train_texts == '../paraphraser/paraphrases.xml':
         with codecs.open('../paraphraser/paraphrases.xml', 'r', "utf_8") as file:
             data = objectify.fromstring(file.read())
@@ -97,8 +99,8 @@ def main(parser):
                 second_sentence.append(line.split('\t')[4].strip())
                 similarity.append(int(line.split('\t')[0]))
 
-        first_sentence = tokenize(first_sentence, args.word_type)
-        second_sentence = tokenize(second_sentence, args.word_type)
+    first_sentence = tokenize(first_sentence, args.word_type)
+    second_sentence = tokenize(second_sentence, args.word_type)
 
     class_data = pd.DataFrame({'first_sentence': first_sentence,
                                'second_sentence': second_sentence,
@@ -128,7 +130,6 @@ def main(parser):
 
     X = abs(train_s1_matrix - train_s2_matrix)
     y = class_data.similarity
-
     if args.src_train_texts == '../paraphraser/paraphrases.xml':
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=57)
     else:
@@ -136,14 +137,21 @@ def main(parser):
         X_test = X[4076:]
         y_train = y[:4076]
         y_test = y[4076:]
-
     lr = LogisticRegression()
+    kfold = model_selection.KFold(n_splits=num_folds, shuffle=True, random_state=3)
+    #scoring = ['precision_micro', 'f1_micro', 'recall_micro']
+    #results = cross_validate(lr, X, y, scoring=scoring, cv=kfold, return_train_score=False)
+    predicted_cross_val = cross_val_predict(estimator=lr, X=X, y=y, cv=kfold)
     lr.fit(X_train, y_train)
     predicted = lr.predict(X_test)
     with open(args.output, 'a+') as out:
         out.write(str(np.mean(predicted == y_test)) + "\n")
         out.write(classification_report(y_test, predicted))
         out.write("\n")
+        out.write("--- Cross-validation on " + str(num_folds) + " folds without additional features ---\n")
+        out.write(classification_report(y, predicted_cross_val))
+        out.write("\n")
+        #out.write(str(results))
     print("~~~~~Task completed~~~~~")
 
 if __name__ == '__main__':
