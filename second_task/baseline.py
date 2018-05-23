@@ -165,9 +165,6 @@ def main(parser):
     double_matrix = double_feat_union.transform(pairs_of_sentences)
     # double_matrix = sparse.csr_matrix(double_matrix)
     X = X.toarray()
-    print(X)
-    print('-------------------')
-    print(double_matrix)
     X = np.hstack((X, double_matrix))
 
     if args.src_train_texts == '../paraphraser/paraphrases.xml':
