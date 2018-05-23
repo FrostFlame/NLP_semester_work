@@ -111,9 +111,37 @@ def most_informative_feature_for_class(feat_union, classifier):
         features_for_all_classes.append(topn)
     return features_for_all_classes
 
+def get_50_fp_and_fn_elements_for_binary(X_test, Y_actual, Y_predicted):
+    fp_fn_elements = {
+        "fp":[],
+        "fn":[]
+    }
+    for i in (0, len(Y_predicted)):
+        if(Y_actual[i] == 0 and Y_predicted[i] is not 0):
+            fn_not_null_features = get_not_null_features(X_test)
+            fp_fn_elements.get("fn").append({
+                "X":fn_not_null_features
+                                             })
+        elif (Y_actual[i] == 1 and Y_predicted[i] is not 1):
+            fn_not_null_features = get_not_null_features(X_test)
+            fp_fn_elements.get("fp").append({
+                "X":fn_not_null_features
+                                             })
+        if(len(fp_fn_elements.get("fp")) == 50 and len(fp_fn_elements.get("fn")) == 50):
+            return fp_fn_elements
+    return fp_fn_elements
+
+def get_not_null_features(X):
+    fn_not_null_features = []
+    for x in X:
+        if (x is not 0):
+            fn_not_null_features.append(x)
+    return fn_not_null_features
+
 def main(parser):
     args = parser.parse_args()
     num_folds = 5
+    binary = False
     if args.src_train_texts == '../paraphraser/paraphrases.xml':
         with codecs.open('../paraphraser/paraphrases.xml', 'r', "utf_8") as file:
             data = objectify.fromstring(file.read())
@@ -125,6 +153,7 @@ def main(parser):
             first_sentence = []
             second_sentence = []
             similarity = list()
+            binary = True
             for line in file:
                 first_sentence.append(line.split('\t')[3])
                 second_sentence.append(line.split('\t')[4].strip())
@@ -168,7 +197,6 @@ def main(parser):
 
     X = abs(train_s1_matrix - train_s2_matrix)
     y = class_data.similarity
-
     X = X.toarray()
     if (args.features == "true"):
         pairs_of_sentences = []
@@ -199,6 +227,9 @@ def main(parser):
     f.close()
     most_informative_features = most_informative_feature_for_class(feat_union, lr)
     predicted = lr.predict(X_test)
+    fp_and_fn = {}
+    if (binary):
+        fp_and_fn = get_50_fp_and_fn_elements_for_binary(X_test, y_test, predicted)
     with open('../second_task/output.txt', 'a+') as out:
         out.write(str(np.mean(predicted == y_test)) + "\n")
         out.write(classification_report(y_test, predicted))
@@ -208,6 +239,9 @@ def main(parser):
         out.write("\n")
         for features_for_class in most_informative_features:
             out.write(np.unicode(str(features_for_class)) + "\n")
+        if (binary):
+            out.write("50 False Positive elements" + str(fp_and_fn.get("fp")) + "\n")
+            out.write("50 False Negative elements" + str(fp_and_fn.get("fn")) + "\n")
         #out.write(str(results))
     print("~~~~~Task completed~~~~~")
 
