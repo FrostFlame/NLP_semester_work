@@ -156,16 +156,17 @@ def main(parser):
     X = abs(train_s1_matrix - train_s2_matrix)
     y = class_data.similarity
 
-    pairs_of_sentences = []
-    for first, second in zip(class_data.first_sentence, class_data.second_sentence):
-        pairs_of_sentences.append(first + '-+-' + second)
-
-    double_feat_union = FeatureUnion(transformer_list=[('ngram', NgramTransformer())
-                                                       ])
-    double_matrix = double_feat_union.transform(pairs_of_sentences)
-    # double_matrix = sparse.csr_matrix(double_matrix)
     X = X.toarray()
-    X = np.hstack((X, double_matrix))
+    if (args.features == "true"):
+        pairs_of_sentences = []
+        for first, second in zip(class_data.first_sentence, class_data.second_sentence):
+            pairs_of_sentences.append(first + '-+-' + second)
+
+        double_feat_union = FeatureUnion(transformer_list=[('ngram', NgramTransformer())
+                                                           ])
+        double_matrix = double_feat_union.transform(pairs_of_sentences)
+        # double_matrix = sparse.csr_matrix(double_matrix)
+        X = np.hstack((X, double_matrix))
 
     if args.src_train_texts == '../paraphraser/paraphrases.xml':
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=57)
@@ -189,12 +190,12 @@ def main(parser):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    # parser.add_argument('--src-train-texts', action="store", dest="src_train_texts", default='../paraphraser/paraphrases.xml')
-    parser.add_argument('--src-train-texts', action="store", dest="src_train_texts", default='../msrpc/msrpc_paraphrase_train.txt')
+    parser.add_argument('--src-train-texts', action="store", dest="src_train_texts", default='../paraphraser/paraphrases.xml')
+    # parser.add_argument('--src-train-texts', action="store", dest="src_train_texts", default='../msrpc/msrpc_paraphrase_train.txt')
     parser.add_argument('--text-encoding', action="store", dest="encoding", default="utf_8")
     parser.add_argument('--word-type', choices=['surface_all', 'surface_no_pm', 'stem'], default="surface_no_pm", action="store", dest="word_type")
     parser.add_argument('-n', type=int, action="store", dest="n", default=2)
-    parser.add_argument('--features', choices=['true', 'false'], action="store", default='false')
+    parser.add_argument('--features', choices=['true', 'false'], action="store", default='true')
     parser.add_argument('--laplace', action="store_true", dest="laplace")
     parser.add_argument('-o', action="store", dest="output", default='../second_task/model.pickle')
 
