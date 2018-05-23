@@ -1,7 +1,10 @@
 import codecs, string, nltk, argparse
 import pandas as pd
+import scipy
 from lxml import objectify
 from sklearn import model_selection
+from scipy import sparse
+from sklearn.preprocessing import FunctionTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -12,10 +15,12 @@ from nltk.corpus import stopwords
 from nltk.stem.snowball import SnowballStemmer
 from sklearn.pipeline import Pipeline
 from sklearn.pipeline import FeatureUnion
+import pickle
 
 from nltk import word_tokenize
 
 import numpy as np
+from sklearn.svm import SVC
 
 sw = stopwords.words('russian')
 
@@ -43,6 +48,28 @@ class PosStats(BaseEstimator, TransformerMixin):
 
     def get_feature_names(self):
         return ['nn', 'rb', 'vb', 'jj']
+
+
+class NgramTransformer(BaseEstimator, TransformerMixin):
+    def fit(self, x, y=None):
+        return self
+
+    def transform(selfself, posts):
+        features = []
+        for pair in posts:
+            first_sentence, second_sentence = pair.split('-+-')
+            first_tokenized = nltk.tokenize.word_tokenize(first_sentence)
+            second_tokenized = nltk.tokenize.word_tokenize(second_sentence)
+            numerator = 0
+            for word in first_tokenized:
+                if word in second_tokenized:
+                    numerator += 1
+            divider = len(first_tokenized) + len(second_tokenized) - numerator
+            features.append([numerator/divider, numerator/len(first_tokenized), numerator/len(second_tokenized)])
+        return features
+
+    def get_feature_names(self):
+        return ['f1', 'f2', 'f3']
 
 def tokenize(list_of_sentences, word_type):
     if(word_type == "surface_all"):
@@ -141,6 +168,19 @@ def main(parser):
 
     X = abs(train_s1_matrix - train_s2_matrix)
     y = class_data.similarity
+
+    X = X.toarray()
+    if (args.features == "true"):
+        pairs_of_sentences = []
+        for first, second in zip(class_data.first_sentence, class_data.second_sentence):
+            pairs_of_sentences.append(first + '-+-' + second)
+
+        double_feat_union = FeatureUnion(transformer_list=[('ngram', NgramTransformer())
+                                                           ])
+        double_matrix = double_feat_union.transform(pairs_of_sentences)
+        # double_matrix = sparse.csr_matrix(double_matrix)
+        X = np.hstack((X, double_matrix))
+
     if args.src_train_texts == '../paraphraser/paraphrases.xml':
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=57)
     else:
@@ -154,9 +194,12 @@ def main(parser):
     #results = cross_validate(lr, X, y, scoring=scoring, cv=kfold, return_train_score=False)
     predicted_cross_val = cross_val_predict(estimator=lr, X=X, y=y, cv=kfold)
     lr.fit(X_train, y_train)
+    f = open(args.output, 'wb')
+    pickle.dump(lr, f)
+    f.close()
     most_informative_features = most_informative_feature_for_class(feat_union, lr)
     predicted = lr.predict(X_test)
-    with open(args.output, 'a+', encoding='utf-8') as out:
+    with open('../second_task/output.txt', 'a+') as out:
         out.write(str(np.mean(predicted == y_test)) + "\n")
         out.write(classification_report(y_test, predicted))
         out.write("\n")
@@ -171,11 +214,12 @@ def main(parser):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--src-train-texts', action="store", dest="src_train_texts", default='../paraphraser/paraphrases.xml')
+    # parser.add_argument('--src-train-texts', action="store", dest="src_train_texts", default='../msrpc/msrpc_paraphrase_train.txt')
     parser.add_argument('--text-encoding', action="store", dest="encoding", default="utf_8")
     parser.add_argument('--word-type', choices=['surface_all', 'surface_no_pm', 'stem'], default="surface_no_pm", action="store", dest="word_type")
     parser.add_argument('-n', type=int, action="store", dest="n", default=2)
     parser.add_argument('--features', choices=['true', 'false'], action="store", default='true')
     parser.add_argument('--laplace', action="store_true", dest="laplace")
-    parser.add_argument('-o', action="store", dest="output", default='../second_task/output.txt')
+    parser.add_argument('-o', action="store", dest="output", default='../second_task/model.pickle')
 
     main(parser)
