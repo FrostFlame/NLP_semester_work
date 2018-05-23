@@ -2,13 +2,14 @@ import codecs, string, nltk, argparse
 import pandas as pd
 import scipy
 from lxml import objectify
+from sklearn import model_selection
 from scipy import sparse
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
+from sklearn.model_selection import train_test_split, cross_validate, cross_val_predict
+from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.linear_model import LogisticRegression
 from nltk.corpus import stopwords
 from nltk.stem.snowball import SnowballStemmer
@@ -99,8 +100,20 @@ def get_data(data, corp):
             similarity.append(doc.value[6].text)
     return first_sentence, second_sentence, similarity
 
+def most_informative_feature_for_class(feat_union, classifier):
+    n = 10
+    features_for_all_classes = []
+    classes = classifier.classes_
+    for class_label in classes:
+        labelid = list(classes).index(class_label)
+        feature_names = feat_union.get_feature_names()
+        topn = sorted(zip(classifier.coef_[labelid], feature_names))[-n:]
+        features_for_all_classes.append(topn)
+    return features_for_all_classes
+
 def main(parser):
     args = parser.parse_args()
+    num_folds = 5
     if args.src_train_texts == '../paraphraser/paraphrases.xml':
         with codecs.open('../paraphraser/paraphrases.xml', 'r', "utf_8") as file:
             data = objectify.fromstring(file.read())
@@ -175,17 +188,27 @@ def main(parser):
         X_test = X[4076:]
         y_train = y[:4076]
         y_test = y[4076:]
-
     lr = LogisticRegression()
+    kfold = model_selection.KFold(n_splits=num_folds, shuffle=True, random_state=3)
+    #scoring = ['precision_micro', 'f1_micro', 'recall_micro']
+    #results = cross_validate(lr, X, y, scoring=scoring, cv=kfold, return_train_score=False)
+    predicted_cross_val = cross_val_predict(estimator=lr, X=X, y=y, cv=kfold)
     lr.fit(X_train, y_train)
     f = open(args.output, 'wb')
     pickle.dump(lr, f)
     f.close()
+    most_informative_features = most_informative_feature_for_class(feat_union, lr)
     predicted = lr.predict(X_test)
     with open('../second_task/output.txt', 'a+') as out:
         out.write(str(np.mean(predicted == y_test)) + "\n")
         out.write(classification_report(y_test, predicted))
         out.write("\n")
+        out.write("--- Cross-validation on " + str(num_folds) + " folds without additional features ---\n")
+        out.write(classification_report(y, predicted_cross_val))
+        out.write("\n")
+        for features_for_class in most_informative_features:
+            out.write(np.unicode(str(features_for_class)) + "\n")
+        #out.write(str(results))
     print("~~~~~Task completed~~~~~")
 
 if __name__ == '__main__':
