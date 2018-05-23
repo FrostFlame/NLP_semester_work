@@ -1,9 +1,9 @@
-from sklearn import datasets
+import scipy
+from scipy import sparse
+from numpy import hstack
 
-iris = datasets.load_iris()
-from sklearn.naive_bayes import GaussianNB
+x = [[1, 2], [3, 4], [5, 6]]
+y = [[9, 8, 7], [11, 12, 13], [20, 21, 22]]
 
-gnb = GaussianNB()
-y_pred = gnb.fit(iris.data, iris.target).predict(iris.data)
-print("Number of mislabeled points out of a total %d points : %d"
-      % (iris.data.shape[0], (iris.target != y_pred).sum()))
+un = hstack((x, y))
+print(un)
