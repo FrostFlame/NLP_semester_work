@@ -1,28 +1,24 @@
 import codecs, string, nltk, argparse
 import pandas as pd
-import scipy
 from lxml import objectify
 from sklearn import model_selection
-from scipy import sparse
-from sklearn.preprocessing import FunctionTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.model_selection import train_test_split, cross_validate, cross_val_predict
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split, cross_val_predict
+from sklearn.metrics import classification_report
 from sklearn.linear_model import LogisticRegression
 from nltk.corpus import stopwords
 from nltk.stem.snowball import SnowballStemmer
-from sklearn.pipeline import Pipeline
 from sklearn.pipeline import FeatureUnion
 import pickle
 
-from nltk import word_tokenize
-
 import numpy as np
-from sklearn.svm import SVC
 
 sw = stopwords.words('russian')
+
+def load_model(file):
+    return pickle.load(file)
 
 class PosStats(BaseEstimator, TransformerMixin):
     def fit(self, x, y=None):
@@ -65,14 +61,15 @@ class NgramTransformer(BaseEstimator, TransformerMixin):
                 if word in second_tokenized:
                     numerator += 1
             divider = len(first_tokenized) + len(second_tokenized) - numerator
-            features.append([numerator/divider, numerator/len(first_tokenized), numerator/len(second_tokenized)])
+            features.append([numerator / divider, numerator / len(first_tokenized), numerator / len(second_tokenized)])
         return features
 
     def get_feature_names(self):
         return ['f1', 'f2', 'f3']
 
+
 def tokenize(list_of_sentences, word_type):
-    if(word_type == "surface_all"):
+    if (word_type == "surface_all"):
         return list_of_sentences
 
     stemmer = SnowballStemmer("russian")
@@ -81,13 +78,14 @@ def tokenize(list_of_sentences, word_type):
     text = [[w.lower() for w in sentence if (w not in punc)] for sentence in text]
     new_text = []
     for sentence in text:
-        if(word_type == "surface_no_pm"):
+        if (word_type == "surface_no_pm"):
             word = [stemmer.stem(i) for i in sentence if (i not in sw and not i.isdigit())]
         else:
             word = [i for i in sentence]
         new_sentence = " ".join(word)
         new_text.append(new_sentence)
     return new_text
+
 
 def get_data(data, corp):
     first_sentence = []
@@ -100,36 +98,46 @@ def get_data(data, corp):
             similarity.append(doc.value[6].text)
     return first_sentence, second_sentence, similarity
 
-def most_informative_feature_for_class(feat_union, classifier):
+
+def most_informative_feature_for_class(feat_union, classifier, binary):
     n = 10
     features_for_all_classes = []
-    classes = classifier.classes_
-    for class_label in classes:
-        labelid = list(classes).index(class_label)
+    if (binary):
         feature_names = feat_union.get_feature_names()
-        topn = sorted(zip(classifier.coef_[labelid], feature_names))[-n:]
+        coefs_with_fns = sorted(zip(classifier.coef_[0], feature_names))
+        topn = zip(coefs_with_fns[:n], coefs_with_fns[:-(n + 1):-1])
         features_for_all_classes.append(topn)
+    else:
+        classes = classifier.classes_
+        for class_label in classes:
+            labelid = list(classes).index(class_label)
+            feature_names = feat_union.get_feature_names()
+            topn = sorted(zip(classifier.coef_[labelid], feature_names))[-n:]
+            features_for_all_classes.append(topn)
     return features_for_all_classes
+
 
 def get_50_fp_and_fn_elements_for_binary(X_test, Y_actual, Y_predicted):
     fp_fn_elements = {
-        "fp":[],
-        "fn":[]
+        "fp": [],
+        "fn": []
     }
-    for i in (0, len(Y_predicted)):
-        if(Y_actual[i] == 0 and Y_predicted[i] is not 0):
+    Y_actual = Y_actual.values
+    for i in (0, len(Y_predicted) - 1):
+        if (Y_actual[i] == 0 and Y_predicted[i] is not 0):
             fn_not_null_features = get_not_null_features(X_test)
             fp_fn_elements.get("fn").append({
-                "X":fn_not_null_features
-                                             })
+                "X": fn_not_null_features
+            })
         elif (Y_actual[i] == 1 and Y_predicted[i] is not 1):
             fn_not_null_features = get_not_null_features(X_test)
             fp_fn_elements.get("fp").append({
-                "X":fn_not_null_features
-                                             })
-        if(len(fp_fn_elements.get("fp")) == 50 and len(fp_fn_elements.get("fn")) == 50):
+                "X": fn_not_null_features
+            })
+        if (len(fp_fn_elements.get("fp")) == 50 and len(fp_fn_elements.get("fn")) == 50):
             return fp_fn_elements
     return fp_fn_elements
+
 
 def get_not_null_features(X):
     fn_not_null_features = []
@@ -137,6 +145,7 @@ def get_not_null_features(X):
         if (x is not 0):
             fn_not_null_features.append(x)
     return fn_not_null_features
+
 
 def main(parser):
     args = parser.parse_args()
@@ -173,7 +182,7 @@ def main(parser):
                                'second_sentence': second_sentence,
                                'similarity': similarity})
 
-    if(args.features == "true"):
+    if (args.features == "true"):
         feat_union = FeatureUnion(transformer_list=[('tfidf', TfidfVectorizer(analyzer='word',
                                                                               min_df=3,
                                                                               ngram_range=(1, args.n),
@@ -196,6 +205,7 @@ def main(parser):
     train_s2_matrix = feat_union.transform(class_data.second_sentence)
 
     X = abs(train_s1_matrix - train_s2_matrix)
+
     y = class_data.similarity
     X = X.toarray()
     if (args.features == "true"):
@@ -206,7 +216,6 @@ def main(parser):
         double_feat_union = FeatureUnion(transformer_list=[('ngram', NgramTransformer())
                                                            ])
         double_matrix = double_feat_union.transform(pairs_of_sentences)
-        # double_matrix = sparse.csr_matrix(double_matrix)
         X = np.hstack((X, double_matrix))
 
     if args.src_train_texts == '../paraphraser/paraphrases.xml':
@@ -218,41 +227,41 @@ def main(parser):
         y_test = y[4076:]
     lr = LogisticRegression()
     kfold = model_selection.KFold(n_splits=num_folds, shuffle=True, random_state=3)
-    #scoring = ['precision_micro', 'f1_micro', 'recall_micro']
-    #results = cross_validate(lr, X, y, scoring=scoring, cv=kfold, return_train_score=False)
     predicted_cross_val = cross_val_predict(estimator=lr, X=X, y=y, cv=kfold)
     lr.fit(X_train, y_train)
     f = open(args.output, 'wb')
     pickle.dump(lr, f)
     f.close()
-    most_informative_features = most_informative_feature_for_class(feat_union, lr)
+    most_informative_features = most_informative_feature_for_class(feat_union, lr, binary)
     predicted = lr.predict(X_test)
-    fp_and_fn = {}
-    if (binary):
-        fp_and_fn = get_50_fp_and_fn_elements_for_binary(X_test, y_test, predicted)
-    with open('../second_task/output.txt', 'a+') as out:
+    with open('../second_task/output.txt', 'a+', encoding='utf-8') as out:
         out.write(str(np.mean(predicted == y_test)) + "\n")
         out.write(classification_report(y_test, predicted))
         out.write("\n")
-        out.write("--- Cross-validation on " + str(num_folds) + " folds without additional features ---\n")
+        feature_existence = "with" if (args.features == "true") else "without"
+        out.write(
+            "--- Cross-validation on " + str(num_folds) + " folds " + feature_existence + " additional features —-\n")
         out.write(classification_report(y, predicted_cross_val))
         out.write("\n")
-        for features_for_class in most_informative_features:
-            out.write(np.unicode(str(features_for_class)) + "\n")
         if (binary):
-            out.write("50 False Positive elements" + str(fp_and_fn.get("fp")) + "\n")
-            out.write("50 False Negative elements" + str(fp_and_fn.get("fn")) + "\n")
-        #out.write(str(results))
+            for features_for_class in most_informative_features:
+                out.write(np.unicode(str(list(features_for_class))) + "\n")
+        else:
+            for features_for_class in most_informative_features:
+                out.write(np.unicode(str(features_for_class)) + "\n")
     print("~~~~~Task completed~~~~~")
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--src-train-texts', action="store", dest="src_train_texts", default='../paraphraser/paraphrases.xml')
-    # parser.add_argument('--src-train-texts', action="store", dest="src_train_texts", default='../msrpc/msrpc_paraphrase_train.txt')
+    # parser.add_argument('--src-train-texts', action="store", dest="src_train_texts",
+    #                     default='../msrpc/msrpc_paraphrase_train.txt')
     parser.add_argument('--text-encoding', action="store", dest="encoding", default="utf_8")
-    parser.add_argument('--word-type', choices=['surface_all', 'surface_no_pm', 'stem'], default="surface_no_pm", action="store", dest="word_type")
+    parser.add_argument('--word-type', choices=['surface_all', 'surface_no_pm', 'stem'], default="surface_no_pm",
+                        action="store", dest="word_type")
     parser.add_argument('-n', type=int, action="store", dest="n", default=2)
-    parser.add_argument('--features', choices=['true', 'false'], action="store", default='true')
+    parser.add_argument('--features', choices=['true', 'false'], action="store", default='false')
     parser.add_argument('--laplace', action="store_true", dest="laplace")
     parser.add_argument('-o', action="store", dest="output", default='../second_task/model.pickle')
 
